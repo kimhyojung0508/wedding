@@ -404,6 +404,9 @@ const galleryLightbox = document.getElementById("galleryLightbox");
 const galleryLarge = document.getElementById("galleryLarge");
 const galleryCounter = document.getElementById("galleryCounter");
 let galleryIndex = 0;
+let galleryTouchStartX = null;
+let galleryTouchStartY = null;
+const galleryHistoryKey = "weddingGalleryLightbox";
 
 function setGalleryIndex(index){
   galleryIndex=(index+galleryImages.length)%galleryImages.length;
@@ -411,16 +414,30 @@ function setGalleryIndex(index){
   galleryCounter.textContent=`${galleryIndex+1} / ${galleryImages.length}`;
 }
 function openGallery(index=galleryIndex){
+  const wasOpen = galleryLightbox.classList.contains("is-open");
   setGalleryIndex(index);
   galleryLightbox.classList.add("is-open");
   galleryLightbox.setAttribute("aria-hidden","false");
   document.body.style.overflow="hidden";
+  // Add a history entry so the phone's Back button closes only the photo viewer.
+  if(!wasOpen){
+    history.pushState({...history.state, [galleryHistoryKey]: true}, "");
+  }
 }
-function closeGallery(){
+function closeGallery(fromPopState=false){
+  const wasOpen = galleryLightbox.classList.contains("is-open");
   galleryLightbox.classList.remove("is-open");
   galleryLightbox.setAttribute("aria-hidden","true");
   document.body.style.overflow="";
+  if(!fromPopState && wasOpen && history.state && history.state[galleryHistoryKey]){
+    history.back();
+  }
 }
+window.addEventListener("popstate",()=>{
+  if(galleryLightbox.classList.contains("is-open")){
+    closeGallery(true);
+  }
+});
 document.querySelectorAll(".thumb").forEach((t,index)=>{
   t.addEventListener("click",()=>openGallery(index));
   t.addEventListener("keydown",e=>{
@@ -428,9 +445,26 @@ document.querySelectorAll(".thumb").forEach((t,index)=>{
   });
 });
 galleryLightbox.querySelector(".gallery-close").addEventListener("click",closeGallery);
-galleryLightbox.querySelector(".gallery-prev").addEventListener("click",()=>openGallery(galleryIndex-1));
-galleryLightbox.querySelector(".gallery-next").addEventListener("click",()=>openGallery(galleryIndex+1));
+galleryLightbox.querySelector(".gallery-prev").addEventListener("click",()=>setGalleryIndex(galleryIndex-1));
+galleryLightbox.querySelector(".gallery-next").addEventListener("click",()=>setGalleryIndex(galleryIndex+1));
 galleryLightbox.addEventListener("click",e=>{if(e.target===galleryLightbox)closeGallery();});
+
+// Mobile swipe: swipe left for next photo, right for previous photo.
+galleryLightbox.addEventListener("touchstart",e=>{
+  if(!galleryLightbox.classList.contains("is-open") || !e.changedTouches.length) return;
+  galleryTouchStartX=e.changedTouches[0].clientX;
+  galleryTouchStartY=e.changedTouches[0].clientY;
+},{passive:true});
+galleryLightbox.addEventListener("touchend",e=>{
+  if(galleryTouchStartX===null || galleryTouchStartY===null || !e.changedTouches.length) return;
+  const dx=e.changedTouches[0].clientX-galleryTouchStartX;
+  const dy=e.changedTouches[0].clientY-galleryTouchStartY;
+  if(Math.abs(dx)>45 && Math.abs(dx)>Math.abs(dy)*1.2){
+    setGalleryIndex(galleryIndex+(dx<0 ? 1 : -1));
+  }
+  galleryTouchStartX=null;
+  galleryTouchStartY=null;
+},{passive:true});
 document.addEventListener("keydown",e=>{
   if(!galleryLightbox.classList.contains("is-open")) return;
   if(e.key==="Escape") closeGallery();
